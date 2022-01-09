@@ -198,19 +198,18 @@ class Blockchain {
         let errorLog = [];
         return new Promise(async (resolve, reject) => {
             if (self.chain.length){
-             self.chain
-            .forEach(async block => {
-                let isBlockValid = await block.validate();
-                if (!isBlockValid){
-                    errorLog.push(block);
+                 for(const block of self.chain){
+                    let isBlockValid = await block.validate();
+                    if (!isBlockValid){
+                        errorLog.push(block);
+                    }
                 }
-            }
-            );
             }
             resolve(errorLog);
         
         });
     }
+
 
 }
 
