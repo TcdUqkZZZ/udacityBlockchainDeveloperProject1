@@ -1,139 +1,82 @@
 /**
- *          BlockchainController
- * 
- * This class expose the endpoints that the client applications will use to interact with the 
- * Blockchain dataset
+ *                          Block class
+ *  The Block class is a main component into any Blockchain platform, 
+ *  it will store the data and act as a dataset for your application.
+ *  The class will expose a method to validate the data... The body of
+ *  the block will contain an Object that contain the data to be stored,
+ *  the data should be stored encoded.
+ *  All the exposed methods should return a Promise to allow all the methods 
+ *  run asynchronous.
  */
-class BlockchainController {
 
-    //The constructor receive the instance of the express.js app and the Blockchain class
-    constructor(app, blockchainObj) {
-        this.app = app;
-        this.blockchain = blockchainObj;
-        // All the endpoints methods needs to be called in the constructor to initialize the route.
-        this.getBlockByHeight();
-        this.requestOwnership();
-        this.submitStar();
-        this.getBlockByHash();
-        this.getStarsByOwner();
-        this.validateChain();
+const SHA256 = require('crypto-js/sha256');
+const hex2ascii = require('hex2ascii');
+
+class Block {
+
+    // Constructor - argument data will be the object containing the transaction data
+	constructor(data){
+		this.hash = null;                                           // Hash of the block
+		this.height = 0;                                            // Block Height (consecutive number of each block)
+		this.body = Buffer.from(JSON.stringify(data)).toString('hex');   // Will contain the transactions stored in the block, by default it will encode the data
+		this.time = 0;                                              // Timestamp for the Block creation
+		this.previousBlockHash = null;                              // Reference to the previous Block Hash
     }
-
-    // Enpoint to Get a Block by Height (GET Endpoint)
-    getBlockByHeight() {
-        this.app.get("/block/height/:height", async (req, res) => {
-            if(req.params.height) {
-                const height = parseInt(req.params.height);
-                let block = await this.blockchain.getBlockByHeight(height);
-                if(block){
-                    return res.status(200).json(block);
-                } else {
-                    return res.status(404).send("Block Not Found!");
-                }
-            } else {
-                return res.status(404).send("Block Not Found! Review the Parameters!");
+    
+    /**
+     *  validate() method will validate if the block has been tampered or not.
+     *  Been tampered means that someone from outside the application tried to change
+     *  values in the block data as a consecuence the hash of the block should be different.
+     *  Steps:
+     *  1. Return a new promise to allow the method be called asynchronous.
+     *  2. Save the in auxiliary variable the current hash of the block (`this` represent the block object)
+     *  3. Recalculate the hash of the entire block (Use SHA256 from crypto-js library)
+     *  4. Compare if the auxiliary hash value is different from the calculated one.
+     *  5. Resolve true or false depending if it is valid or not.
+     *  Note: to access the class values inside a Promise code you need to create an auxiliary value `let self = this;`
+     */
+    validate() {
+        let self = this;
+        return new Promise((resolve, reject) => {
+            // Save in auxiliary variable the current block hash
+            let tempHash = self.hash;
+            self.hash = null;
+            // Recalculate the hash of the Block
+            let comparedHash = SHA256(JSON.stringify(self)).toString();
+            // Comparing if the hashes changed
+            // Returning the Block is not valid
+            if (tempHash !== comparedHash){
+                self.hash=tempHash;
+                resolve(false)
             }
-            
+            // Returning the Block is valid
+            self.hash=tempHash;
+            resolve(true)
         });
     }
 
-    // Endpoint that allows user to request Ownership of a Wallet address (POST Endpoint)
-    requestOwnership() {
-        this.app.post("/requestValidation", async (req, res) => {
-            if(req.body.address) {
-                const address = req.body.address;
-                const message = await this.blockchain.requestMessageOwnershipVerification(address);
-                if(message){
-                    return res.status(200).json(message);
-                } else {
-                    return res.status(500).send("An error happened!");
-                }
-            } else {
-                return res.status(500).send("Check the Body Parameter!");
-            }
-        });
-    }
-
-    // Endpoint that allow Submit a Star, yu need first to `requestOwnership` to have the message (POST endpoint)
-    submitStar() {
-        this.app.post("/submitstar", async (req, res) => {
-            if(req.body.address && req.body.message && req.body.signature && req.body.star) {
-                const address = req.body.address;
-                const message = req.body.message;
-                const signature = req.body.signature;
-                const star = req.body.star;
-                try {
-                    let block = await this.blockchain.submitStar(address, message, signature, star);
-                    if(block){
-                        return res.status(200).json(block);
-                    } else {
-                        return res.status(500).send("An error happened!");
-                    }
-                } catch (error) {
-                    return res.status(500).send(error);
-                }
-            } else {
-                return res.status(500).send("Check the Body Parameter!");
-            }
-        });
-    }
-
-    // This endpoint allows you to retrieve the block by hash (GET endpoint)
-    getBlockByHash() {
-        this.app.get("/block/hash/:hash", async (req, res) => {
-            if(req.params.hash) {
-                const hash = req.params.hash;
-                let block = await this.blockchain.getBlockByHash(hash);
-                if(block){
-                    return res.status(200).json(block);
-                } else {
-                    return res.status(404).send("Block Not Found!");
-                }
-            } else {
-                return res.status(404).send("Block Not Found! Review the Parameters!");
-            }
-            
-        });
-    }
-
-    // This endpoint allows you to request the list of Stars registered by an owner
-    getStarsByOwner() {
-        this.app.get("/blocks/:address", async (req, res) => {
-            if(req.params.address) {
-                const address = req.params.address;
-                try {
-                    let stars = await this.blockchain.getStarsByWalletAddress(address);
-                    if(stars){
-                        return res.status(200).json(stars);
-                    } else {
-                        return res.status(404).send("Block Not Found!");
-                    }
-                } catch (error) {
-                    return res.status(500).send("An error happened!");
-                }
-            } else {
-                return res.status(500).send("Block Not Found! Review the Parameters!");
-            }
-            
-        });
-    }
-        
-    // Chain Validation endpoint
-    validateChain() {
-        this.app.get("/validateChain", async(req,res) =>{
-            try{
-            let errors = await this.blockchain.validateChain();
-            if(!errors.length){
-                return res.status(200).send("Chain Valid!");
-            }
-            else return res.status(500).json(errors);
-            }
-            catch(error){
-                return res.status(500).send("Error: chain verification unavailable");
-            }
-        });
+    /**
+     *  Auxiliary Method to return the block body (decoding the data)
+     *  Steps:
+     *  
+     *  1. Use hex2ascii module to decode the data
+     *  2. Because data is a javascript object use JSON.parse(string) to get the Javascript Object
+     *  3. Resolve with the data and make sure that you don't need to return the data for the `genesis block` 
+     *     or Reject with an error.
+     */
+    getBData() {
+        // Getting the encoded data saved in the Block
+        var encodedData = this.body;
+        // Decoding the data to retrieve the JSON representation of the object
+        var decodedData = hex2ascii(encodedData);
+        // Parse the data to an object to be retrieve.
+        var dataObject = JSON.parse(decodedData);
+        // Resolve with the data if the object isn't the Genesis block
+        if (this.height > 0){
+            return dataObject;
+        }
     }
 
 }
 
-module.exports = (app, blockchainObj) => { return new BlockchainController(app, blockchainObj);}
+module.exports.Block = Block;                    // Exposing the Block class as a module
