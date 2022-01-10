@@ -201,13 +201,15 @@ class Blockchain {
     validateChain() {
         let self = this;
         let errorLog = [];
+        let lastExaminedHash = null;
         return new Promise(async (resolve, reject) => {
             if (self.chain.length){
                  for(const block of self.chain){
                     let isBlockValid = await block.validate();
-                    if (!isBlockValid){
+                    if (!isBlockValid || block.previousBlockHash !== lastExaminedHash){
                         errorLog.push(block);
                     }
+                     lastExaminedHash = block.hash;
                 }
             }
             resolve(errorLog);
